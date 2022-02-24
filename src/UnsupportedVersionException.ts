@@ -1,0 +1,3 @@
+class UnsupportedVersionException extends Error {
+    
+}
