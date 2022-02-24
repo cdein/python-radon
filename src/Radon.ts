@@ -1,12 +1,17 @@
 import { exec, ExecException } from "child_process";
-import { window, workspace } from "vscode";
+
+import * as which from "which";
+import { workspace } from "vscode";
+
 import Maintainability from "./Maintainability";
+import RadonNotFoundException from "./RadonNotFoundException";
 import Rating from "./Rating";
 import SourcecodeInformation from "./SourcecodeInformation";
 
+let currentVersion: number[] | null = null;
+
 export function calculateCyclomaticComplexity(filepath: string): Promise<Rating[]> {
-    return new Promise((resolve, reject) => {
-        const executable = getRadonExecutable();
+    return getRadonExecutable().then(executable => new Promise((resolve, reject) => {
         exec(`${executable} cc ${filepath} -j -a --show-closures`, (err: ExecException | null, stdout: string, stderr: string) => {
             if (err) {
                 return reject(err);
@@ -19,12 +24,11 @@ export function calculateCyclomaticComplexity(filepath: string): Promise<Rating[
             });
             resolve(result);
         });
-    });
+    }));
 }
 
 export function calculateMaintainablityIndex(filepath: string): Promise<Maintainability> {
-    return new Promise((resolve, reject) => {
-        const executable = getRadonExecutable();
+    return getRadonExecutable().then(executable => new Promise((resolve, reject) => {
         exec(`${executable} mi ${filepath} -j -s`, (err: ExecException | null, stdout: string, stderr: string) => {
             if (err) {
                 console.error(err);
@@ -38,12 +42,11 @@ export function calculateMaintainablityIndex(filepath: string): Promise<Maintain
             });
             resolve(result);
         });
-    });
+    }));
 }
 
 export function calculateSourcecodeInformation(filepath: string): Promise<SourcecodeInformation> {
-    return new Promise((resolve, reject) => {
-        const executable = getRadonExecutable();
+    return getRadonExecutable().then(executable => new Promise((resolve, reject) => {
         exec(`${executable} raw ${filepath} -j`, (err: ExecException | null, stdout: string, stderr: string) => {
             if (err) {
                 console.error(err);
@@ -53,27 +56,32 @@ export function calculateSourcecodeInformation(filepath: string): Promise<Source
             let result: SourcecodeInformation = { loc: 0, lloc: 0, blank: 0, comments: 0, multi: 0, singleComments: 0, sloc: 0 };
             Object.keys(metrics).forEach(key => {
                 if (!filepath.endsWith(key)) { return; };
-                result = {...metrics[key], singleComments: metrics[key].single_comments};
+                result = { ...metrics[key], singleComments: metrics[key].single_comments };
             });
             resolve(result);
         });
-    });
+    }));
 }
 
 export function getVersion(): Promise<number[]> {
-    return new Promise((resolve, reject) => {
-        const executable = getRadonExecutable();
+    if (currentVersion) {
+        return Promise.resolve(currentVersion);
+    }
+    return getRadonExecutable().then(executable => new Promise((resolve, reject) => {
         exec(`${executable} -v`, (err: ExecException | null, stdout: string, stderr: string) => {
             if (err) {
                 return reject(err);
             }
             resolve(stdout.trim().split(".").map(s => parseInt(s, 10)));
         });
-    });
+    }));
 }
 
-function getRadonExecutable() {
-    return workspace.getConfiguration("python.radon").get("executable", "radon");
+function getRadonExecutable(): Promise<string> {
+    const executable = workspace.getConfiguration("python.radon").get("executable", "radon");
+    return which(executable).catch(err => {
+        throw new RadonNotFoundException(`Couldn't find executable "${executable}".`);
+    });
 }
 
 function mapMetricToRating(metric: any) {

@@ -46,7 +46,7 @@ This extension contributes the following settings:
 
 ### 1.0.2
 
-The documentation was extended
+Allow editing settings when executable couldn't be found and the documentation was extended
 
 ### 1.0.1
 

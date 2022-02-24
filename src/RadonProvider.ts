@@ -1,11 +1,13 @@
 import { basename } from 'path';
-import { ExecException } from 'child_process';
-import { CancellationToken, CodeLens, CodeLensProvider, Event, EventEmitter, Position, Range, Selection, TextDocument, Uri, window, workspace } from 'vscode';
-import Maintainability from './Maintainability';
 
+import { CancellationToken, CodeLens, CodeLensProvider, commands, Event, EventEmitter, Position, Range, TextDocument, window, workspace } from 'vscode';
+
+import Maintainability from './Maintainability';
 import * as radon from './Radon';
+import RadonNotFoundException from './RadonNotFoundException';
 import Rating from './Rating';
 import SourcecodeInformation from './SourcecodeInformation';
+import UnsupportedVersionException from './UnsupportedVersionException';
 
 let TERMINAL_ID = 1;
 
@@ -17,11 +19,11 @@ function capitalize(text: string) {
 export default class RadonProvider implements CodeLensProvider {
 
     private codeLenses: CodeLens[] = [];
-    private _onDidChangeCodeLenses: EventEmitter<void> = new EventEmitter<void>();
     private sourcecodeInformations: { [key: string]: SourcecodeInformation } = {};
     private maintainabilities: { [key: string]: Maintainability } = {};
     private ratings: { [key: string]: Rating[] } = {};
-    private currentVersion: number[] | null = null;
+
+    private _onDidChangeCodeLenses: EventEmitter<void> = new EventEmitter<void>();
     public readonly onDidChangeCodeLenses: Event<void> = this._onDidChangeCodeLenses.event;
 
 
@@ -42,65 +44,49 @@ export default class RadonProvider implements CodeLensProvider {
         window.onDidChangeActiveTextEditor(e => e && this.retrieveData(e.document));
 
         workspace.onDidCloseTextDocument(event => {
-            delete this.maintainabilities[event.fileName];
-            delete this.ratings[event.fileName];
+            if (event.fileName in this.maintainabilities) {
+                delete this.maintainabilities[event.fileName];
+            }
+            if (event.fileName in this.ratings) {
+                delete this.ratings[event.fileName];
+            }
         });
     }
 
     private retrieveData(document: TextDocument) {
-        console.log("Retrieve data");
-        try {
-            let check;
-            if (this.currentVersion === null) {
-                check = radon.getVersion();
-            } else {
-                check = Promise.resolve(this.currentVersion);
+        radon.getVersion().then(version => {
+            const [major, minor] = version;
+            if (major < 5 || minor < 1) {
+                throw new UnsupportedVersionException("You need at least python radon version 5.1 installed. Try pip install \"radon>=5.1\".");
             }
-            check.then(version => {
-                console.log("Version", version);
-                const [major, minor] = version;
-                if (major < 5 || minor < 1) {
-                    throw new UnsupportedVersionException("You need at least python radon version 5.1 installed. Try pip install \"radon>=5.1\".");
-                }
-                this.currentVersion = version;
-                console.log("Checked", version);
-                return Promise.all([
-                    radon.calculateCyclomaticComplexity(document.fileName),
-                    radon.calculateMaintainablityIndex(document.fileName),
-                    radon.calculateSourcecodeInformation(document.fileName)]);
-            }).then(([ratings, maintainability, sourcecodeInformation]) => {
-                console.log("Firing", document.fileName);
-                this.sourcecodeInformations[document.fileName] = sourcecodeInformation;
-                this.maintainabilities[document.fileName] = maintainability;
-                this.ratings[document.fileName] = ratings.map(rating => {
-                    const { lineno, character } = rating;
-                    const position = new Position(lineno - 1, character);
-                    const range = document.getWordRangeAtPosition(position);
-                    if (range) {
-                        rating.range = range;
-                    }
-                    return rating;
-                }).filter(rating => !!rating.range);
-                this._onDidChangeCodeLenses.fire();
-                console.log("Fired", document.fileName);
-            }).catch((err) => {
-                // if (err instanceof UnsupportedVersionException || (err.message && err.message.startsWith("Command failed"))) {
-                    window.showInformationMessage(err.message, ...["Install Radon"])
-                        .then(selection => {
-                            if (selection === "Install Radon") {
-                                const terminal = window.createTerminal(`Install Radon ${TERMINAL_ID++}`);
-                                terminal.show(true);
-                                terminal.sendText("pip install --user \"radon>=5.1\"", true);
-                            }
-                        });
-                    return;
-                // }
-                // console.error(err);
-                // window.showErrorMessage(err.message);
-            });
-        } catch (err) {
-            console.error(err);
-        }
+            return Promise.all([
+                radon.calculateCyclomaticComplexity(document.fileName),
+                radon.calculateMaintainablityIndex(document.fileName),
+                radon.calculateSourcecodeInformation(document.fileName)]);
+        }).then(([ratings, maintainability, sourcecodeInformation]) => {
+            this.sourcecodeInformations[document.fileName] = sourcecodeInformation;
+            this.maintainabilities[document.fileName] = maintainability;
+            this.ratings[document.fileName] = ratings
+                .map(rating => resolveRatingRange(rating, document))
+                .filter(rating => !!rating.range);
+            this._onDidChangeCodeLenses.fire();
+        }).catch((err) => {
+            if (err instanceof UnsupportedVersionException || err instanceof RadonNotFoundException) {
+                window.showInformationMessage(err.message, ...["Edit settings", "Install Radon"])
+                    .then(selection => {
+                        if (selection === "Install Radon") {
+                            const terminal = window.createTerminal(`Install Radon ${TERMINAL_ID++}`);
+                            terminal.show(true);
+                            terminal.sendText("pip install --user \"radon>=5.1\"", true);
+                        } else if (selection === "Edit settings") {
+                            commands.executeCommand('workbench.action.openSettings', 'python.radon.executable');
+                        }
+                    });
+                return;
+            }
+            // console.error(err);
+            // window.showErrorMessage(err.message);
+        });
     }
 
     private createRatingCodeLens(rating: Rating): CodeLens {
@@ -130,34 +116,37 @@ export default class RadonProvider implements CodeLensProvider {
 
     public provideCodeLenses(document: TextDocument, token: CancellationToken): CodeLens[] | Thenable<CodeLens[]> {
 
-        if (workspace.getConfiguration("python.radon").get("enable", true)) {
-            this.codeLenses = [];
-            try {
-                if (this.ratings[document.fileName]
-                    && this.ratings[document.fileName].length > 0) {
-                    this.codeLenses = this.ratings[document.fileName].map(this.createRatingCodeLens);
-                }
-                let range = null;
-                if (this.maintainabilities[document.fileName]
-                    && (range = document.getWordRangeAtPosition(new Position(0, 0))) !== undefined) {
-                    this.codeLenses.push(this.createMaintainabilityCodeLens(range, document.fileName,
-                        this.maintainabilities[document.fileName], this.sourcecodeInformations[document.fileName]));
-                }
-            } catch (err) {
-                console.error(err);
-            }
-            console.log("CL", this.codeLenses);
+        if (!workspace.getConfiguration("python.radon").get("enable", true)
+            || !this.ratings[document.fileName] || this.ratings[document.fileName].length === 0
+            || !this.maintainabilities[document.fileName]) {
+            return [];
+        }
+        this.codeLenses = this.ratings[document.fileName].map(this.createRatingCodeLens);
+        let range = document.getWordRangeAtPosition(new Position(0, 0));
+        if (range === undefined) {
             return this.codeLenses;
         }
-        return [];
+        this.codeLenses.push(this.createMaintainabilityCodeLens(range, document.fileName,
+            this.maintainabilities[document.fileName], this.sourcecodeInformations[document.fileName]));
+        return this.codeLenses;
     }
 
     public resolveCodeLens(codeLens: CodeLens, token: CancellationToken) {
-        if (workspace.getConfiguration("python.radon").get("enable", true)) {
-            return codeLens;
+        if (!workspace.getConfiguration("python.radon").get("enable", true)) {
+            return null;
         }
-        return null;
+        return codeLens;
     }
+}
+
+function resolveRatingRange(rating: Rating, document: TextDocument): Rating {
+    const { lineno, character } = rating;
+    const position = new Position(lineno - 1, character);
+    const range = document.getWordRangeAtPosition(position);
+    if (range) {
+        rating.range = range;
+    }
+    return rating;
 }
 
 function getSourcecodeInformation({ loc, lloc, sloc, comments, blank, multi }: SourcecodeInformation): string {

@@ -1,3 +1,1 @@
-class UnsupportedVersionException extends Error {
-    
-}
+export default class UnsupportedVersionException extends Error {}
