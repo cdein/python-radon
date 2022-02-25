@@ -1,6 +1,6 @@
 import { basename } from 'path';
 
-import { CancellationToken, CodeLens, CodeLensProvider, commands, Event, EventEmitter, Position, Range, TextDocument, window, workspace } from 'vscode';
+import { CancellationToken, CodeLens, CodeLensProvider, commands, Event, EventEmitter, Position, Range, StatusBarAlignment, StatusBarItem, TextDocument, ThemeColor, window, workspace } from 'vscode';
 
 import Maintainability from './Maintainability';
 import * as radon from './Radon';
@@ -10,6 +10,22 @@ import SourcecodeInformation from './SourcecodeInformation';
 import UnsupportedVersionException from './UnsupportedVersionException';
 
 let TERMINAL_ID = 1;
+const colors = {
+    status: {
+        default: {
+            foreground: new ThemeColor("statusBarItem.foreground"),
+            background: new ThemeColor("statusBarItem.background")
+        },
+        warning: {
+            foreground: new ThemeColor("statusBarItem.warningForeground"),
+            background: new ThemeColor("statusBarItem.warningBackground")
+        },
+        error: {
+            foreground: new ThemeColor("statusBarItem.errorForeground"),
+            background: new ThemeColor("statusBarItem.errorBackground")
+        }
+    }
+};
 
 function capitalize(text: string) {
     if (!text) { return text; }
@@ -23,12 +39,15 @@ export default class RadonProvider implements CodeLensProvider {
     private maintainabilities: { [key: string]: Maintainability } = {};
     private ratings: { [key: string]: Rating[] } = {};
 
+    private maintainabilityStatusItem: StatusBarItem | null = null;
+
     private _onDidChangeCodeLenses: EventEmitter<void> = new EventEmitter<void>();
     public readonly onDidChangeCodeLenses: Event<void> = this._onDidChangeCodeLenses.event;
 
 
     constructor() {
         this.registerHandler();
+        this.maintainabilityStatusItem = window.createStatusBarItem("python.radon.maintainability", StatusBarAlignment.Left, 50);
         if (window.activeTextEditor) {
             this.retrieveData(window.activeTextEditor.document);
         }
@@ -84,8 +103,7 @@ export default class RadonProvider implements CodeLensProvider {
                     });
                 return;
             }
-            // console.error(err);
-            // window.showErrorMessage(err.message);
+            window.showErrorMessage(err.message);
         });
     }
 
@@ -103,7 +121,6 @@ export default class RadonProvider implements CodeLensProvider {
     private createMaintainabilityCodeLens(range: Range, filename: string, maintainability: Maintainability,
         sourcecodeInformation: SourcecodeInformation): CodeLens {
         const { index, rank } = maintainability;
-        const { loc, lloc, sloc, comments, blank, multi, singleComments } = sourcecodeInformation;
         const rangeInformation = getRangeInformation(rank);
         const sourcecodeSummary = getSourcecodeInformation(sourcecodeInformation);
         const message = `${basename(filename)} is rated ${rank} with a maintainability index of ${index.toFixed(2)} ${rangeInformation}`;
@@ -114,13 +131,25 @@ export default class RadonProvider implements CodeLensProvider {
         });
     }
 
-    public provideCodeLenses(document: TextDocument, token: CancellationToken): CodeLens[] | Thenable<CodeLens[]> {
+    private updateMaintainabilityStatus(maintainability: Maintainability): void {
+        if (!this.maintainabilityStatusItem) {
+            return;
+        }
+        const [color, backcolor] = getStatusColors(maintainability.index);
+        this.maintainabilityStatusItem.color = color;
+        this.maintainabilityStatusItem.backgroundColor = backcolor;
+        this.maintainabilityStatusItem.text = `$(file-code) ${maintainability.index.toFixed(2)} (${maintainability.rank})`;
+        this.maintainabilityStatusItem.tooltip = `Python Radon Maintainability\n\nIndex: ${maintainability.index.toFixed(2)}\nRank: ${maintainability.rank}`;
+        this.maintainabilityStatusItem.show();
+    }
 
+    public provideCodeLenses(document: TextDocument, token: CancellationToken): CodeLens[] | Thenable<CodeLens[]> {
         if (!workspace.getConfiguration("python.radon").get("enable", true)
             || !this.ratings[document.fileName] || this.ratings[document.fileName].length === 0
             || !this.maintainabilities[document.fileName]) {
             return [];
         }
+        this.updateMaintainabilityStatus(this.maintainabilities[document.fileName]);
         this.codeLenses = this.ratings[document.fileName].map(this.createRatingCodeLens);
         let range = document.getWordRangeAtPosition(new Position(0, 0));
         if (range === undefined) {
@@ -186,4 +215,14 @@ function getRiskMessage(rank: string): string {
         default:
             return "very high - error - prone, unstable block";
     }
+}
+
+function getStatusColors(maintainabilityIndex: number): ThemeColor[] {
+    if (maintainabilityIndex >= 20) {
+        return [colors.status.default.foreground, colors.status.default.background];
+    }
+    if (maintainabilityIndex >= 10) {
+        return [colors.status.warning.foreground, colors.status.warning.background];
+    }
+    return [colors.status.error.foreground, colors.status.error.background];
 }

@@ -44,6 +44,10 @@ This extension contributes the following settings:
 
 ## Release Notes
 
+### 1.0.3
+
+Show the maintainability index of the current source code in the status bar
+
 ### 1.0.2
 
 Allow editing settings when executable couldn't be found and the documentation was extended
