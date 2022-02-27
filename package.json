@@ -2,7 +2,7 @@
 	"name": "python-radon",
 	"displayName": "python-radon",
 	"description": "Checks the python code complexity with radon",
-	"version": "1.0.3",
+	"version": "1.0.4",
 	"author": {
 		"email": "christian.dein@dein-hosting.de",
 		"name": "Christian Dein"
