@@ -33,7 +33,7 @@ See the [radon documentation](https://radon.readthedocs.io/en/latest/intro.html)
 
 ## Code Lens and Status Bar
 
-The cyclomatic complexity is show in front of functions, methods or classes. You can also see the current maintainable index of the source code f the active editor in the status bar.
+The cyclomatic complexity is shown in front of functions, methods or classes. You can also see the current maintainable index of the source code of the active editor in the status bar.
 
 ![Screeshot - Code Lens and Status Bar](images/scrsht-codelens-statusbar.png)
 
@@ -51,6 +51,10 @@ This extension contributes the following settings:
 [Complex icons created by Flat Icons - Flaticon](https://www.flaticon.com/free-icons/complex)
 
 ## Release Notes
+
+### 1.0.5
+
+Spelling errors were corrected
 
 ### 1.0.4
 
