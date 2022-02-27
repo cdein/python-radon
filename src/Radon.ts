@@ -12,7 +12,7 @@ let currentVersion: number[] | null = null;
 
 export function calculateCyclomaticComplexity(filepath: string): Promise<Rating[]> {
     return getRadonExecutable().then(executable => new Promise((resolve, reject) => {
-        exec(`${executable} cc ${filepath} -j -a --show-closures`, (err: ExecException | null, stdout: string, stderr: string) => {
+        exec(`${executable} cc "${filepath}" -j -a --show-closures`, (err: ExecException | null, stdout: string, stderr: string) => {
             if (err) {
                 return reject(err);
             }
@@ -29,7 +29,7 @@ export function calculateCyclomaticComplexity(filepath: string): Promise<Rating[
 
 export function calculateMaintainablityIndex(filepath: string): Promise<Maintainability> {
     return getRadonExecutable().then(executable => new Promise((resolve, reject) => {
-        exec(`${executable} mi ${filepath} -j -s`, (err: ExecException | null, stdout: string, stderr: string) => {
+        exec(`${executable} mi "${filepath}" -j -s`, (err: ExecException | null, stdout: string, stderr: string) => {
             if (err) {
                 console.error(err);
                 return reject(err);
@@ -47,7 +47,7 @@ export function calculateMaintainablityIndex(filepath: string): Promise<Maintain
 
 export function calculateSourcecodeInformation(filepath: string): Promise<SourcecodeInformation> {
     return getRadonExecutable().then(executable => new Promise((resolve, reject) => {
-        exec(`${executable} raw ${filepath} -j`, (err: ExecException | null, stdout: string, stderr: string) => {
+        exec(`${executable} raw "${filepath}" -j`, (err: ExecException | null, stdout: string, stderr: string) => {
             if (err) {
                 console.error(err);
                 return reject(err);
@@ -79,7 +79,7 @@ export function getVersion(): Promise<number[]> {
 
 function getRadonExecutable(): Promise<string> {
     const executable = workspace.getConfiguration("python.radon").get("executable", "radon");
-    return which(executable).catch(err => {
+    return which(executable).then(executable => `"${executable}"`).catch(err => {
         throw new RadonNotFoundException(`Couldn't find executable "${executable}".`);
     });
 }

@@ -31,6 +31,14 @@ See the [radon documentation](https://radon.readthedocs.io/en/latest/intro.html)
 |31 - 40    |E      |high - complex block, alarming         |
 |41+        |F      |very high - error-prone, unstable block|
 
+## Code Lens and Status Bar
+
+The cyclomatic complexity is show in front of functions, methods or classes. You can also see the current maintainable index of the source code f the active editor in the status bar.
+
+![Screeshot - Code Lens and Status Bar](images/scrsht-codelens-statusbar.png)
+
+
+
 ## Extension Settings
 
 This extension contributes the following settings:
@@ -43,6 +51,10 @@ This extension contributes the following settings:
 [Complex icons created by Flat Icons - Flaticon](https://www.flaticon.com/free-icons/complex)
 
 ## Release Notes
+
+### 1.0.4
+
+Added screenshot of the functionality to the README.md
 
 ### 1.0.3
 
