@@ -46,11 +46,25 @@ This extension contributes the following settings:
 - `python.radon.enable`: enable/disable this extension
 - `python.radon.executable`: set to a path to your radon executable, e.g. `/usr/bin/radon`
 
+## Troubleshooting
+
+### Running on Windows
+
+If you install python-radon on a windows system there is no single radon executable. To solve this you can create a batch script `radon.cmd` in a folder which is part of your PATH environment variable of the following content:
+
+```batch
+@python -m radon %*
+```
+
 ## Credits
 
 [Complex icons created by Flat Icons - Flaticon](https://www.flaticon.com/free-icons/complex)
 
 ## Release Notes
+
+### 1.0.6
+
+Provide trouble shooting for Windows System 
 
 ### 1.0.5
 
