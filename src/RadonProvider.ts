@@ -75,7 +75,7 @@ export default class RadonProvider implements CodeLensProvider {
     private retrieveData(document: TextDocument) {
         radon.getVersion().then(version => {
             const [major, minor] = version;
-            if (major < 5 || minor < 1) {
+            if (major < 5 || (major == 5 && minor < 1)) {
                 throw new UnsupportedVersionException("You need at least python radon version 5.1 installed. Try pip install \"radon>=5.1\".");
             }
             return Promise.all([
